@@ -27,12 +27,18 @@ Either way, the one thing only *you* can do is the Basecamp login — see **Step
 ## Before you start
 
 - A **Mac** (these instructions are macOS-specific; the underlying server also runs on Linux/Windows).
-- **[Homebrew](https://brew.sh)** installed. Check with `brew --version`.
-- A **Basecamp 3 / Basecamp 4 account** you can log into.
+- A **Basecamp account** you can log into.
 - About **10 minutes**.
 
-You do **not** need Python pre-installed — we use [`uv`](https://docs.astral.sh/uv/), which fetches
-its own Python.
+> **You'll probably need an Ark admin to help.** This setup installs developer tools
+> (**[Homebrew](https://brew.sh)** and `uv`), which require **administrator access** on your Mac —
+> something most staff machines don't have. If `brew --version` returns "command not found" and you
+> can't install it yourself, ask an admin to do **Step 2** with you (or run the whole thing with the
+> [agent install prompt](AGENT_INSTALL.md) while an admin is on hand).
+
+You do **not** need Python pre-installed, and **it doesn't matter which Python version you already
+have** — we use [`uv`](https://docs.astral.sh/uv/), which downloads its own isolated Python 3.12.
+That's why the commands below always call `./venv/bin/python` rather than a bare `python`/`python3`.
 
 ---
 
@@ -58,15 +64,17 @@ You just need: Client ID, Client Secret (from the admin) + your own Account ID.
 ### Option B — Register your own OAuth app
 
 1. Go to <https://launchpad.37signals.com/integrations> and click **Register a new application**.
-2. Fill the form. **This is where people get stuck — read carefully:**
+2. Fill the form to match the screenshot below:
 
    | Field | What to enter |
    |---|---|
-   | Name of your application | Anything, e.g. `Basecamp MCP (Your Name)` |
-   | Company / product name | e.g. `The Ark Church` |
-   | Company / product **website** | A **real `https://` URL**, e.g. `https://www.thearkchurch.com`. **This field rejects `localhost`** — that's the #1 validation error. |
-   | Products | Check **Basecamp 4** (or **Basecamp 3** if that's your account). |
-   | **Redirect URI** | `http://localhost:8000/auth/callback` — `localhost` **is** allowed here. |
+   | Name of your application | Anything, e.g. `MyMCP` |
+   | Your company's name | `The Ark Church` |
+   | Your website URL | `https://www.thearkchurch.com` |
+   | Products | Check **Basecamp 5** (the current product). |
+   | **Redirect URI** | `http://localhost:8000/auth/callback` |
+
+   ![Filled-in Basecamp Launchpad New Application form](images/launchpad-new-application.jpeg)
 
 3. **If you get "not a valid URI":**
    - You almost certainly have a **stray space** pasted into the box. Clear the field and *type* the
