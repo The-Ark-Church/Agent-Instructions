@@ -1,0 +1,7 @@
+# Never commit secrets — guard against accidental adds if the server is cloned nearby
+.env
+*.env
+oauth_tokens.json
+**/oauth_tokens.json
+venv/
+__pycache__/
