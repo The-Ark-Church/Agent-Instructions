@@ -6,8 +6,8 @@ Skills The Ark Church staff can install for their AI assistant.
 |---|---|---|
 | [`ark-writing-coach`](ark-writing-coach/) | ✅ Available | Polishes drafts to Ark Communications Style Guide standards automatically |
 | [`build-my-style-guide`](build-my-style-guide/) | ✅ Available | Run-once writing interview (8 church-staff prompts) that produces a personal style guide for ghostwriting |
-| `write-like-me` | Planned | Ghostwrites in your personal voice, with the Ark style guide applied |
-| `action-method` | Planned | Structures proposals and decision requests (Wes Kao's framework) |
+| [`write-like-me`](write-like-me/) | ✅ Available | Ghostwrites in your personal voice, with the Ark style guide always applied on top |
+| [`action-method`](action-method/) | ✅ Available | Coaches proposals, decision requests, and upward communication into rigorous structure (Wes Kao's framework) |
 
 ## How staff get skills
 
