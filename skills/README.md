@@ -2,13 +2,16 @@
 
 Skills The Ark Church staff can install for their AI assistant.
 
-Planned (Phase 6 of the AI Knowledge Base plan — the `ark-essentials` plugin):
+| Skill | Status | Purpose |
+|---|---|---|
+| [`ark-writing-coach`](ark-writing-coach/) | ✅ Available | Polishes drafts to Ark Communications Style Guide standards automatically |
+| `build-my-style-guide` | Planned | Short interview that saves a personal style guide for ghostwriting |
+| `write-like-me` | Planned | Ghostwrites in your personal voice, with the Ark style guide applied |
+| `action-method` | Planned | Structures proposals and decision requests (Wes Kao's framework) |
 
-| Skill | Purpose |
-|---|---|
-| `ark-writing-coach` | Polishes drafts to Ark Communications Style Guide standards automatically |
-| `build-my-style-guide` | Short interview that saves a personal style guide for ghostwriting |
-| `write-like-me` | Ghostwrites in your personal voice, with the Ark style guide applied |
-| `action-method` | Structures proposals and decision requests (Wes Kao's framework) |
+## How staff get skills
 
-Nothing here yet — this folder is the landing spot as skills are built.
+- **claude.ai / Claude Desktop (most staff):** an admin uploads the skill (zip of its folder) in the Claude Teams admin console — it becomes available org-wide, nothing to install.
+- **Claude Code:** copy the skill folder into `~/.claude/skills/`.
+
+Skill `reference/` files are copies of the `knowledge-base/` documents — update the knowledge base first, then refresh the copies and re-upload.
