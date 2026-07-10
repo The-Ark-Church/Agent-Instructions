@@ -14,6 +14,7 @@ For Ark-specific details, read these (raw GitHub, always current):
 - Brand kit (colors, logos, fonts): https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-brand-kit.json
 - Style guide (all writing rules): https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-communications-style-guide.md
 - Terminology: https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-terminology.md
+- Live web style guide (arkv1 site components + brand): https://www.thearkchurch.com/styleguide — brand pages under "The Ark Brand": ?component=brand-colors · brand-logos · brand-elements · brand-voice (voice, writing rules, approved emojis)
 
 ## Communication standards
 
