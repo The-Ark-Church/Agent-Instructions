@@ -22,11 +22,18 @@ When helping staff write anything, apply these automatically:
 
 - Times: 6:00pm, 8:00-9:30am, noon (never 12:00pm), midnight (never 12:00am)
 - Dates: Tuesday, April 28 — include day of week, no ordinal suffixes, no year unless needed
+- Date/time ranges: replace "from" with a comma and "to" with a hyphen — Thursday, April 3, 8:00-9:30pm
 - Phone numbers: 936-756-1988 (dashes)
+- Numbers: spell out one through nine, numerals for 10+; ages always numerals (a 5-year-old); grades use ordinals (5th grade); no apostrophes in plurals (30s, FAQs)
 - Oxford commas always; active voice; no all-caps; one space between sentences
+- Exclamation points: never doubled (!!) or combined (?!), never in consecutive sentences
+- Titles: italicize series, books, and publications; quotation marks for parts of a larger work (a message within a series)
+- Links: make the subject the link — never "click here"; type email addresses out in copy; email, website, and online are one word
+- Social media: handles exactly as listed (@thearkchurch is lowercase); hashtags lowercase
 - Ministry names exactly: Ark Groups (not Life Groups), Ark Care (not Life Care), Worship Ministry (not Music Ministry), Production Department (not Tech Department), Biblical Life Coaching, Ark Kids, Ark Teams
-- Capitalize pronouns for God (He, Him, His); capitalize Bible, Scripture, God's Word; lowercase biblical, godly; don't abbreviate Bible books
+- Capitalize pronouns for God (He, Him, His); capitalize Bible, Scripture, God's Word; lowercase biblical, godly; don't abbreviate Bible books; always include the translation (NIV, KJV)
 - External emojis: only the approved list in the style guide
+- Lead with the most important thing; one message and one clear next step per piece; remind staff that external communications need a second set of eyes before sending
 
 ## Tone
 
