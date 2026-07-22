@@ -4,45 +4,76 @@ ark_pdf.py — Build Ark Church-branded PDFs with one small, consistent API.
 Styling (colors, logo, fonts, layout) is handled for you from the bundled brand
 assets, per knowledge-base/ark-brand-kit.json:
   - Blue #1864ea dominant · Light Blue #74bdff secondary · Yellow #e0ff00 accent
-    (used sparingly) · Cream #f6f5e7 neutral · Black text
+    (sparingly) · Cream #f6f5e7 neutral · Black text
   - Smile Logo (primary wordmark) as letterhead; Boat Logo in the footer
   - Montserrat (the brand's sanctioned fallback for the licensed Gotham)
 
-You supply the CONTENT; the brand look is automatic. Do not recolor outside the
-palette or restyle — that's the point of the skill.
+You supply the CONTENT; the brand look is automatic.
 
 Requires: reportlab, pillow  (pip install reportlab pillow ; add
---break-system-packages if the environment needs it). No fonts are installed on
-the machine — the TTFs are read from this skill's assets/ and subset-embedded in
-the PDF, so this works in a locked-down Cowork sandbox with no admin rights.
+--break-system-packages if needed). Charts need matplotlib; the visual-QA
+preview needs pypdfium2. No fonts are installed on the machine — the TTFs are
+read from this skill's assets/ and subset-embedded, so this works in a
+locked-down Cowork sandbox with no admin rights.
 
 Usage:
-    from ark_pdf import ArkDoc
-    doc = ArkDoc("Weekly Ministry Update", subtitle="Ark Kids · The Ark Church")
+    from ark_pdf import ArkDoc, today_brand_date, preview_images
+    doc = ArkDoc("Weekly Ministry Update", subtitle="Ark Kids · The Ark Church", date=today_brand_date())
     doc.heading("This week")
-    doc.paragraph("We saw <b>42</b> kids on Sunday, and three families connected.")
-    doc.bullets(["Serve day is Saturday, August 9", "New check-in kiosks are live"])
+    doc.paragraph("We saw <b>42</b> kids on Sunday.")
+    doc.callout("Serve day is Saturday, August 9 — sign up at the kiosk.")
+    doc.bullets(["New check-in kiosks are live", "Two families connected"])
     doc.table(["Service", "Kids"], [["9:00am", "24"], ["11:00am", "18"]])
-    doc.save("/path/to/output.pdf")
+    doc.image("attendance_chart.png", caption="Kids attendance, last 8 weeks")
+    doc.save("out.pdf")
 
-Date/ministry-name/time formatting for the copy itself follows the Ark
-Communications Style Guide — see reference/brand-kit.md (and the ark-writing-coach
-skill for wording).
+ALWAYS finish with a visual pass (see SKILL.md): render the pages with
+preview_images("out.pdf") and LOOK at them — check the header size, that callout
+/ code boxes are sized to their content, that tables and charts don't run off the
+page — then fix and rebuild before delivering.
 """
 from pathlib import Path
 
-# --- resolve bundled assets relative to this file (works wherever the skill lives) ---
 _BASE = Path(__file__).resolve().parents[1]          # skills/ark-brand/
 _FONTS = _BASE / "assets" / "fonts"
 _LOGOS = _BASE / "assets" / "logos"
+_EMOJI = _BASE / "assets" / "emoji"
 
 # --- Ark brand palette (ark-brand-kit.json) ---
-BLUE = "#1864ea"      # primary — dominant
+BLUE = "#1864ea"       # primary — dominant
 LIGHT_BLUE = "#74bdff"  # secondary
-YELLOW = "#e0ff00"    # accent — use sparingly
-CREAM = "#f6f5e7"     # neutral
-INK = "#14171C"       # body text (Black)
+YELLOW = "#e0ff00"     # accent — sparingly
+CREAM = "#f6f5e7"      # neutral
+INK = "#14171C"        # body text (Black)
 GREY = "#5B6570"
+CALLOUT_BG = "#eef3fe"  # a light Blue tint for callout boxes (on-palette)
+
+# Recommended categorical order for chart series (matplotlib), on-brand:
+CHART_COLORS = [BLUE, LIGHT_BLUE, "#0d3f9e", YELLOW, GREY, INK]
+
+# The Ark's approved emoji (org standards). Rendered as inline full-color images
+# because Montserrat has no emoji glyphs. Keyed by the base char (variation
+# selector U+FE0F is stripped before matching). Anything not on this list is left
+# as-is (and will render blank) — the approved set is the allowed set.
+APPROVED_EMOJI = {
+    "😃": "1f603", "😁": "1f601", "😎": "1f60e", "🤣": "1f923", "😊": "1f60a",
+    "🤗": "1f917", "🤔": "1f914", "🫡": "1fae1", "😳": "1f633", "🤯": "1f92f",
+    "👍": "1f44d", "🙌": "1f64c", "👏": "1f44f", "👀": "1f440", "🙏": "1f64f",
+    "❤": "2764", "❗": "2757", "🔥": "1f525", "🥳": "1f973", "🎉": "1f389",
+}
+
+
+def _emojify(text, px=12):
+    """Replace approved emoji with inline image tags sized to the text."""
+    if not text:
+        return text
+    t = str(text).replace("️", "")   # drop variation selector so base chars match
+    for ch, code in APPROVED_EMOJI.items():
+        if ch in t:
+            tag = '<img src="%s" width="%d" height="%d" valign="-2"/>' % (_EMOJI / (code + ".png"), px, px)
+            t = t.replace(ch, tag)
+    return t
+
 
 _FONTS_REGISTERED = False
 
@@ -53,7 +84,7 @@ def _ensure_deps():
         import PIL  # noqa: F401
     except ImportError as e:
         raise RuntimeError(
-            "ark_pdf needs reportlab and pillow. Install them first:\n"
+            "ark_pdf needs reportlab and pillow:\n"
             "    python3 -m pip install reportlab pillow\n"
             "(add --break-system-packages if the environment requires it)."
         ) from e
@@ -75,14 +106,41 @@ def _register_fonts():
 
 
 def today_brand_date():
-    """Today formatted the Ark way: 'Tuesday, July 21, 2026'. (Drop the year in
-    copy where it isn't needed — the style guide prefers 'Tuesday, July 21'.)"""
+    """Today, Ark-formatted: 'Tuesday, July 21, 2026'. Drop the year in copy where
+    it isn't needed — the style guide prefers 'Tuesday, July 21'."""
     from datetime import date
     return date.today().strftime("%A, %B %-d, %Y")
 
 
+def preview_images(pdf_path, dpi=110, out_prefix=None):
+    """Rasterize each page to a PNG so the agent can DO A VISUAL PASS before
+    delivering. Returns the list of PNG paths. Uses pypdfium2 (no system deps):
+    python3 -m pip install pypdfium2."""
+    import os
+    import tempfile
+    try:
+        import pypdfium2 as pdfium
+    except ImportError as e:
+        raise RuntimeError("preview_images needs pypdfium2:\n    python3 -m pip install pypdfium2") from e
+    if out_prefix is None:
+        # Write previews to a temp dir, NOT next to the deliverable, so output folders stay clean.
+        name = os.path.splitext(os.path.basename(str(pdf_path)))[0]
+        out_prefix = os.path.join(tempfile.gettempdir(), "arkpdf_preview_" + name)
+    base = out_prefix
+    doc = pdfium.PdfDocument(str(pdf_path))
+    scale = dpi / 72.0
+    paths = []
+    for i in range(len(doc)):
+        img = doc[i].render(scale=scale).to_pil()
+        p = "%s-%d.png" % (base, i + 1)
+        img.save(p)
+        paths.append(p)
+    return paths
+
+
 class ArkDoc:
-    def __init__(self, title, subtitle="The Ark Church", date=None, footer_note="The Ark Church"):
+    def __init__(self, title, subtitle="The Ark Church", date=None,
+                 footer_note="The Ark Church", logo_width_in=1.7):
         _ensure_deps()
         _register_fonts()
         from reportlab.lib.pagesizes import letter
@@ -93,7 +151,8 @@ class ArkDoc:
         self.subtitle = subtitle
         self.date = date
         self.footer_note = footer_note
-        self.content_width = letter[0] - 1.8 * inch  # 0.9" margins
+        self._logo_w = logo_width_in * inch          # letterhead logo size (smaller default)
+        self.content_width = letter[0] - 1.8 * inch   # 0.9" margins
         self._story = []
         self._styles()
         self._letterhead()
@@ -101,35 +160,32 @@ class ArkDoc:
     # ---------- styles ----------
     def _styles(self):
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_LEFT
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
         from reportlab.lib.colors import HexColor
         base = getSampleStyleSheet()
         self.S = {
-            "h1": ParagraphStyle("h1", fontName="Mont-XB", fontSize=20, leading=24,
+            "h1": ParagraphStyle("h1", fontName="Mont-XB", fontSize=19, leading=23,
                                  textColor=HexColor(BLUE), alignment=TA_LEFT, spaceBefore=6, spaceAfter=2),
-            "subt": ParagraphStyle("subt", fontName="Mont-Med", fontSize=10.5,
-                                   textColor=HexColor(INK), spaceAfter=1),
-            "meta": ParagraphStyle("meta", fontName="Mont", fontSize=9,
-                                   textColor=HexColor(GREY), spaceAfter=8),
-            "h2": ParagraphStyle("h2", fontName="Mont-XB", fontSize=13,
-                                 textColor=HexColor(BLUE), spaceBefore=15, spaceAfter=5),
-            "body": ParagraphStyle("body", fontName="Mont", fontSize=10, leading=14.5,
-                                   textColor=HexColor(INK), spaceAfter=6),
-            "mono": ParagraphStyle("mono", parent=base["Code"], fontSize=8.5, textColor=HexColor(INK),
-                                   backColor=HexColor(CREAM), borderPadding=7, leading=12, spaceAfter=6),
+            "subt": ParagraphStyle("subt", fontName="Mont-Med", fontSize=10.5, textColor=HexColor(INK), spaceAfter=1),
+            "meta": ParagraphStyle("meta", fontName="Mont", fontSize=9, textColor=HexColor(GREY), spaceAfter=8),
+            "h2": ParagraphStyle("h2", fontName="Mont-XB", fontSize=13, textColor=HexColor(BLUE), spaceBefore=15, spaceAfter=5),
+            "body": ParagraphStyle("body", fontName="Mont", fontSize=10, leading=14.5, textColor=HexColor(INK), spaceAfter=6),
+            "monocell": ParagraphStyle("monocell", parent=base["Code"], fontName="Courier", fontSize=8.5,
+                                       textColor=HexColor(INK), leading=12),
+            "callout": ParagraphStyle("callout", fontName="Mont", fontSize=10, leading=14, textColor=HexColor(INK)),
             "cell": ParagraphStyle("cell", fontName="Mont", fontSize=9.5, leading=12.5, textColor=HexColor(INK)),
             "cellh": ParagraphStyle("cellh", fontName="Mont-SB", fontSize=9.5, leading=12.5, textColor=HexColor(CREAM)),
+            "caption": ParagraphStyle("caption", fontName="Mont", fontSize=8.5, leading=11,
+                                      textColor=HexColor(GREY), alignment=TA_CENTER, spaceBefore=3, spaceAfter=8),
         }
 
-    # ---------- building blocks ----------
     def _letterhead(self):
         from reportlab.platypus import Image, Spacer, Paragraph
         smile = _LOGOS / "SmileLogo_Blue.png"
         try:
             from reportlab.lib.utils import ImageReader
             iw, ih = ImageReader(str(smile)).getSize()
-            w = 2.35 * self._inch
-            self._story.append(Image(str(smile), width=w, height=w * ih / iw))
+            self._story.append(Image(str(smile), width=self._logo_w, height=self._logo_w * ih / iw, hAlign="LEFT"))
         except Exception:
             pass
         self._story.append(Spacer(1, 8))
@@ -144,8 +200,8 @@ class ArkDoc:
     def _accent_rule(self):
         from reportlab.platypus import Table, TableStyle
         from reportlab.lib.colors import HexColor
-        yellow_w = 0.55 * self._inch
-        t = Table([["", ""]], colWidths=[yellow_w, self.content_width - yellow_w], rowHeights=[3.5])
+        yw = 0.5 * self._inch
+        t = Table([["", ""]], colWidths=[yw, self.content_width - yw], rowHeights=[3])
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (0, 0), HexColor(YELLOW)),
             ("BACKGROUND", (1, 0), (1, 0), HexColor(LIGHT_BLUE)),
@@ -154,29 +210,51 @@ class ArkDoc:
         ]))
         return t
 
+    # ---------- a correctly-sized background box (table cell, not paragraph bg) ----------
+    def _box(self, text, style_key, bg, accent=None):
+        from reportlab.platypus import Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.colors import HexColor
+        cell = Paragraph(text, self.S[style_key])
+        t = Table([[cell]], colWidths=[self.content_width])
+        cmds = [
+            ("BACKGROUND", (0, 0), (-1, -1), HexColor(bg)),
+            ("TOPPADDING", (0, 0), (-1, -1), 9), ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12), ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]
+        if accent:
+            cmds.append(("LINEBEFORE", (0, 0), (0, -1), 3, HexColor(accent)))
+        t.setStyle(TableStyle(cmds))
+        self._story.append(t)
+        self._story.append(Spacer(1, 6))
+        return self
+
+    # ---------- content API (chainable) ----------
     def heading(self, text):
         from reportlab.platypus import Paragraph
-        self._story.append(Paragraph(text, self.S["h2"]))
+        self._story.append(Paragraph(_emojify(text, px=15), self.S["h2"]))
         return self
 
     def paragraph(self, html):
-        """A paragraph. Inline markup: <b>bold</b>, <font name='Courier'>code</font>."""
         from reportlab.platypus import Paragraph
-        self._story.append(Paragraph(html, self.S["body"]))
+        self._story.append(Paragraph(_emojify(html), self.S["body"]))
         return self
 
     def bullets(self, items):
         from reportlab.platypus import Paragraph, ListFlowable, ListItem
         from reportlab.lib.colors import HexColor
         self._story.append(ListFlowable(
-            [ListItem(Paragraph(t, self.S["body"]), value="•", leftIndent=16) for t in items],
+            [ListItem(Paragraph(_emojify(t), self.S["body"]), value="•", leftIndent=16) for t in items],
             bulletType="bullet", bulletColor=HexColor(BLUE), leftIndent=10, spaceAfter=6))
         return self
 
+    def callout(self, text):
+        """A highlighted note box (light-blue tint + blue left bar), correctly sized."""
+        return self._box(_emojify(text), "callout", CALLOUT_BG, accent=BLUE)
+
     def mono(self, text):
-        from reportlab.platypus import Paragraph
-        self._story.append(Paragraph(text, self.S["mono"]))
-        return self
+        """A monospaced code/literal box on cream, correctly sized to its content."""
+        return self._box(text, "monocell", CREAM)
 
     def spacer(self, pts=6):
         from reportlab.platypus import Spacer
@@ -184,8 +262,8 @@ class ArkDoc:
         return self
 
     def table(self, header, rows, col_ratios=None):
-        """A branded table. header: list of column titles. rows: list of row lists.
-        col_ratios: optional relative widths, e.g. [1, 3]; defaults to equal."""
+        """Branded table. Header repeats across page breaks; long cell text wraps.
+        For very wide data prefer fewer columns or an embedded chart via .image()."""
         from reportlab.platypus import Table, TableStyle, Paragraph
         from reportlab.lib.colors import HexColor, white
         n = len(header)
@@ -195,8 +273,8 @@ class ArkDoc:
         else:
             widths = [self.content_width / n] * n
         data = [[Paragraph(str(h), self.S["cellh"]) for h in header]] + \
-               [[Paragraph("" if c is None else str(c), self.S["cell"]) for c in r] for r in rows]
-        t = Table(data, colWidths=widths, hAlign="LEFT")
+               [[Paragraph(_emojify("" if c is None else str(c), px=11), self.S["cell"]) for c in r] for r in rows]
+        t = Table(data, colWidths=widths, hAlign="LEFT", repeatRows=1)
         t.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), HexColor(BLUE)),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [white, HexColor(CREAM)]),
@@ -207,6 +285,21 @@ class ArkDoc:
             ("LEFTPADDING", (0, 0), (-1, -1), 8),
         ]))
         self._story.append(t)
+        return self
+
+    def image(self, path, width_in=None, caption=None):
+        """Embed an image (e.g. a matplotlib chart rendered in Ark colors), aspect
+        preserved, centered, capped to the content width. Optional caption below."""
+        from reportlab.platypus import Image, Paragraph, Spacer
+        from reportlab.lib.utils import ImageReader
+        iw, ih = ImageReader(str(path)).getSize()
+        w = (width_in * self._inch) if width_in else self.content_width
+        w = min(w, self.content_width)
+        self._story.append(Image(str(path), width=w, height=w * ih / iw, hAlign="CENTER"))
+        if caption:
+            self._story.append(Paragraph(caption, self.S["caption"]))
+        else:
+            self._story.append(Spacer(1, 6))
         return self
 
     # ---------- footer + build ----------

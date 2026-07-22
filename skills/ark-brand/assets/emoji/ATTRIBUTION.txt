@@ -1,0 +1,7 @@
+Emoji graphics are from Twemoji — https://github.com/jdecked/twemoji
+Copyright Twitter, Inc and other contributors.
+Licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+
+Only The Ark Church's approved emoji subset is bundled here (see the approved
+list in the org communication standards / ark-brand SKILL.md). Rendered as
+inline images in PDFs because the text font (Montserrat) has no emoji glyphs.

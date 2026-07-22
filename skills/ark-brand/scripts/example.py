@@ -41,7 +41,7 @@ doc.table(
     col_ratios=[2, 1, 1],
 )
 
-doc.paragraph("Thank you for serving. It matters more than you know. 🙌")
+doc.paragraph("Thank you for serving. It matters more than you know.")
 
 out = os.path.join(os.getcwd(), "ark-brand-example.pdf")
 print("Wrote", doc.save(out))
