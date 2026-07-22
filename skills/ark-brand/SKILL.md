@@ -43,7 +43,9 @@ Use the bundled builder `scripts/ark_pdf.py` — it handles colors, the Smile Lo
 4. **Share the PDF** with the user.
 
 ### The content API (all methods chainable)
-- `ArkDoc(title, subtitle=..., date=..., logo_width_in=1.7)` — sets up the letterhead (Smile Logo + title + accent rule). `date=today_brand_date()` for the Ark date format. `logo_width_in` shrinks/grows the header logo (default 1.7").
+- `ArkDoc(title, subtitle=..., date=..., logo_width_in=1.7, header_style="classic", top_margin_in=None)` — sets up the letterhead (Smile Logo + title + accent rule). `date=today_brand_date()` for the Ark date format. `logo_width_in` shrinks/grows the header logo (default 1.7").
+  - `header_style` picks the letterhead layout: **`"classic"`** (default) logo top-left, title below — the original look; **`"centered"`** logo centered at the top with a tight margin and title below; **`"banner"`** logo and title side by side on one row (most compact — long titles wrap). Each style sets its own space above the logo, so switching styles fixes header whitespace on its own.
+  - `top_margin_in` overrides the space above the logo (in inches) for any style — pass it only when a style's default isn't tight/roomy enough.
 - `.heading(text)` — a blue section heading.
 - `.paragraph(html)` — body text. Inline markup: `<b>bold</b>`, `<font name='Courier'>literal/code</font>`.
 - `.bullets([...])` — a bulleted list.

@@ -139,8 +139,16 @@ def preview_images(pdf_path, dpi=110, out_prefix=None):
 
 
 class ArkDoc:
+    # header presets: (logo alignment, space above logo in inches, gap below logo in pts)
+    _HEADER_STYLES = {
+        "classic":  {"align": "LEFT",   "top_in": 0.7,  "gap_below": 8},
+        "centered": {"align": "CENTER", "top_in": 0.35, "gap_below": 2},
+        "banner":   {"align": "BANNER", "top_in": 0.45, "gap_below": 6},
+    }
+
     def __init__(self, title, subtitle="The Ark Church", date=None,
-                 footer_note="The Ark Church", logo_width_in=1.7):
+                 footer_note="The Ark Church", logo_width_in=1.7,
+                 header_style="classic", top_margin_in=None):
         _ensure_deps()
         _register_fonts()
         from reportlab.lib.pagesizes import letter
@@ -153,6 +161,11 @@ class ArkDoc:
         self.footer_note = footer_note
         self._logo_w = logo_width_in * inch          # letterhead logo size (smaller default)
         self.content_width = letter[0] - 1.8 * inch   # 0.9" margins
+        if header_style not in self._HEADER_STYLES:
+            raise ValueError("header_style must be one of %s" % list(self._HEADER_STYLES))
+        self._hdr = self._HEADER_STYLES[header_style]
+        # explicit top_margin_in wins; otherwise use the style's preset
+        self._top_margin = (top_margin_in if top_margin_in is not None else self._hdr["top_in"]) * inch
         self._story = []
         self._styles()
         self._letterhead()
@@ -180,20 +193,46 @@ class ArkDoc:
         }
 
     def _letterhead(self):
-        from reportlab.platypus import Image, Spacer, Paragraph
+        from reportlab.platypus import Image, Spacer, Paragraph, Table, TableStyle
+        from reportlab.lib.utils import ImageReader
+        from reportlab.lib.units import inch
         smile = _LOGOS / "SmileLogo_Blue.png"
-        try:
-            from reportlab.lib.utils import ImageReader
-            iw, ih = ImageReader(str(smile)).getSize()
-            self._story.append(Image(str(smile), width=self._logo_w, height=self._logo_w * ih / iw, hAlign="LEFT"))
-        except Exception:
-            pass
-        self._story.append(Spacer(1, 8))
-        self._story.append(Paragraph(self.title, self.S["h1"]))
-        if self.subtitle:
-            self._story.append(Paragraph(self.subtitle, self.S["subt"]))
-        if self.date:
-            self._story.append(Paragraph("Prepared %s" % self.date, self.S["meta"]))
+        align, gap_below = self._hdr["align"], self._hdr["gap_below"]
+
+        def _logo(halign):
+            try:
+                iw, ih = ImageReader(str(smile)).getSize()
+                return Image(str(smile), width=self._logo_w,
+                             height=self._logo_w * ih / iw, hAlign=halign)
+            except Exception:
+                return Spacer(1, 0)
+
+        def _title_block():
+            items = [Paragraph(self.title, self.S["h1"])]
+            if self.subtitle:
+                items.append(Paragraph(self.subtitle, self.S["subt"]))
+            if self.date:
+                items.append(Paragraph("Prepared %s" % self.date, self.S["meta"]))
+            return items
+
+        if align == "BANNER":
+            # logo and title side by side on one row — most compact vertically
+            logo_col = self._logo_w + 0.15 * inch
+            tbl = Table([[_logo("CENTER"), _title_block()]],
+                        colWidths=[logo_col, self.content_width - logo_col])
+            tbl.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            self._story.append(tbl)
+        else:
+            self._story.append(_logo(align))   # LEFT or CENTER
+            self._story.append(Spacer(1, gap_below))
+            self._story.extend(_title_block())
+
         self._story.append(self._accent_rule())
         self._story.append(Spacer(1, 6))
 
@@ -326,7 +365,7 @@ class ArkDoc:
     def save(self, path):
         from reportlab.platypus import SimpleDocTemplate
         inch = self._inch
-        doc = SimpleDocTemplate(str(path), pagesize=self._letter, topMargin=0.7 * inch,
+        doc = SimpleDocTemplate(str(path), pagesize=self._letter, topMargin=self._top_margin,
                                 bottomMargin=0.95 * inch, leftMargin=0.9 * inch, rightMargin=0.9 * inch,
                                 title=self.title, author="The Ark Church")
         doc.build(self._story, onFirstPage=self._footer, onLaterPages=self._footer)
