@@ -1,0 +1,194 @@
+{
+  "_readme": "Machine-readable brand kit for The Ark Church. AI agents: start here for all structured brand data (colors, fonts, logos, voice). For writing rules, read ark-communications-style-guide.md. For name and ministry terminology, read ark-terminology.md. Humans: see ark-brand-review.html or thearkchurch.com/brand.",
+  "meta": {
+    "version": "1.0",
+    "updated": "2026-07-09",
+    "source": "The Ark Church Brand 2025 (PDF) and Ark Communications Style Guide (revised June 2024)",
+    "maintainer": "The Ark Church Communications / IT",
+    "assets_base_url": "https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/assets/"
+  },
+  "brand": {
+    "name": "The Ark Church",
+    "casual_name": "The Ark",
+    "adjective_form": "Ark Church",
+    "never": "the ark church (lowercase)",
+    "location": "Conroe, Texas",
+    "website": "https://www.thearkchurch.com",
+    "phone": "936-756-1988",
+    "mission": "We exist to help people live for God, grow stronger, and make a difference.",
+    "taglines": [
+      "Live for God",
+      "Grow Stronger",
+      "Make a Difference",
+      "Friendlier than any bar in town"
+    ],
+    "social": {
+      "instagram": "@thearkchurch"
+    }
+  },
+  "colors": {
+    "primary": {
+      "name": "Blue",
+      "hex": "#1864ea",
+      "rgb": "24, 100, 234",
+      "proportion": "35%",
+      "usage": "Primary brand color. Headlines, buttons, dominant backgrounds."
+    },
+    "secondary": {
+      "name": "Light Blue",
+      "hex": "#74bdff",
+      "rgb": "116, 189, 255",
+      "proportion": "35%",
+      "usage": "Secondary color. Pairs with Blue for gradients, accents, and secondary surfaces."
+    },
+    "accent": {
+      "name": "Yellow",
+      "hex": "#e0ff00",
+      "rgb": "224, 255, 0",
+      "proportion": "20%",
+      "usage": "High-energy accent. Calls to action, highlights. Use sparingly."
+    },
+    "neutral": {
+      "name": "Tan",
+      "hex": "#f6f5e7",
+      "rgb": "246, 245, 231",
+      "proportion": "5%",
+      "usage": "Neutral background, cream surfaces, light text on dark backgrounds."
+    },
+    "black": {
+      "name": "Black",
+      "hex": "#000000",
+      "rgb": "0, 0, 0",
+      "proportion": "5%",
+      "usage": "Text, contrast, dark surfaces."
+    }
+  },
+  "typography": {
+    "primary": {
+      "name": "Gotham Ultra",
+      "usage": "Headlines and display text. Often set in all caps for display (note: all caps is a design treatment only — body copy never uses all caps).",
+      "license_note": "Licensed font (Hoefler&Co). Not distributed in this repo."
+    },
+    "secondary": {
+      "name": "Gotham Medium",
+      "usage": "Body copy and general text.",
+      "license_note": "Licensed font (Hoefler&Co). Not distributed in this repo."
+    },
+    "tertiary": {
+      "name": "Richmond Regular",
+      "usage": "Accent and decorative use.",
+      "license_note": "Licensed font. Not distributed in this repo."
+    },
+    "fallbacks": "When Gotham is unavailable (web/system contexts), use Montserrat or a heavy geometric sans-serif for display and a clean sans-serif for body."
+  },
+  "logos": {
+    "boat_logo": {
+      "description": "The ark boat icon on its own (no circle).",
+      "format": "png",
+      "variants": ["Black", "Blue", "Cream", "White"],
+      "path_pattern": "logos/boat-logo/BoatLogo_{variant}.png"
+    },
+    "smile_logo": {
+      "description": "Primary wordmark: 'THE ARK CHURCH' arched text (the 'smile') with the circle boat icon.",
+      "format": "png",
+      "variants": ["Black", "Blue", "Cream", "White"],
+      "path_pattern": "logos/smile-logo/SmileLogo_{variant}.png"
+    },
+    "circle_logo": {
+      "description": "Boat icon knocked out of a solid circle. Converted from vector source; recolor from vector as needed.",
+      "format": "png + svg",
+      "variants": ["Black (as converted)"],
+      "paths": [
+        "vector-source/Ark-Circle-Logo.png",
+        "vector-source/Ark-Circle-Logo.svg"
+      ]
+    },
+    "vector_sources": {
+      "description": "Original EPS vector artwork plus converted SVG/PNG versions (300dpi). Use EPS/SVG for print and design work.",
+      "path": "vector-source/",
+      "files": [
+        "Ark Circle Logo.eps",
+        "ArkLogo_icon circle knockout.eps",
+        "Ark Smile Logo Sticker NORMAL.eps",
+        "Ark Smile Logo Sticker THIC.eps",
+        "Friendlier ARK LOGO.eps",
+        "Friendlier Tumbler FRIENDLIER LOGO 1.eps",
+        "Friendlier Tumbler FRIENDLIER LOGO 2.eps"
+      ],
+      "note": "Each EPS also has a matching .svg and .png conversion with hyphens instead of spaces in the filename. The 'Friendlier'/'Tumbler' files are merch print artwork. The full 2022 Illustrator brand source (.ai, 80 MB) is kept offline by IT, not in this repo."
+    }
+  },
+  "design_elements": {
+    "arrows": {
+      "description": "Two-tone curved arrow element. Filename is {ArrowColor}{BackgroundAccentColor}.",
+      "path_pattern": "elements/arrows/Arrow_{combo}.png",
+      "combos": ["BlackBlue", "BlackCream", "BlackLightBlue", "BlackYellow", "BlueBlack", "BlueCream", "BlueLightBlue", "BlueYellow", "CreamBlack", "CreamBlue", "LightBlueBlue"]
+    },
+    "lemon_slices": {
+      "description": "Lemon slice graphic element.",
+      "path_pattern": "elements/lemon-slices/LemonSlice_{variant}.png",
+      "variants": ["Blue", "Cream", "LightBlue", "Yellow"]
+    },
+    "topo": {
+      "description": "Topographic line pattern for backgrounds and texture.",
+      "path_pattern": "elements/topo/Topo_{variant}.png",
+      "variants": ["Black", "Blue", "Cream"]
+    },
+    "for_the_saving": {
+      "description": "'For The Saving' graphic element.",
+      "path_pattern": "elements/for-the-saving/ForTheSaving_{variant}.png",
+      "variants": ["Black", "Blue", "Cream"]
+    }
+  },
+  "voice": {
+    "summary": "Authentic, informal, sincere, positive, and fun. Written for unchurched people — church jargon is explained or cut. We communicate what we want FOR people, not FROM them, and we say less to communicate more.",
+    "tone": ["authentic", "informal", "sincere", "positive", "fun"],
+    "principles": [
+      "Advocate for the audience — make people's lives easier",
+      "Say less to communicate more",
+      "Avoid insider lingo — explain or avoid church jargon",
+      "Don't sell — inform, cast vision, share real outcomes",
+      "Lead with what we want for people, not from them",
+      "Active voice always",
+      "Clear beats clever"
+    ],
+    "words_to_avoid": [
+      "church jargon without explanation",
+      "insider lingo and abbreviations in external communications",
+      "all caps (reads as yelling)",
+      "overused/tired phrases",
+      "salesy language"
+    ],
+    "approved_emojis_external": ["😃", "😁", "😎", "🤣", "😊", "🤗", "🤔", "🫡", "😳", "🤯", "👍", "🙌", "👏", "👀", "🙏", "❤️", "❗️", "🔥", "🥳", "🎉"],
+    "emoji_note": "Only the approved list may be used in external communications. Internal communications may use additional emojis at the sender's discretion."
+  },
+  "usage": {
+    "dos": [
+      "Use the exact ministry names: Ark Groups, Ark Care, Ark Kids, Ark Teams, Worship Ministry, Production Department, Biblical Life Coaching",
+      "Format times as 6:00pm, 8:00-9:30am, noon, midnight",
+      "Format dates as Tuesday, April 28 (day of week included, no ordinal suffix)",
+      "Format phone numbers with dashes: 936-756-1988",
+      "Use Oxford commas: games, food, and prizes",
+      "Capitalize pronouns referring to God: He, Him, His, You, Your",
+      "Capitalize Bible, Scripture, God's Word; lowercase biblical, scriptural, godly",
+      "Keep Blue and Light Blue dominant (roughly 35% each); Yellow as accent (20%); Tan and Black sparingly (5% each)"
+    ],
+    "donts": [
+      "Don't write 'the ark church' in lowercase",
+      "Don't use Life Groups, Life Care, Music Ministry, Praise Team, Tech Department, or Biblical Counseling — see ark-terminology.md for correct names",
+      "Don't use all caps in copy",
+      "Don't use 12:00pm or 12:00am — use noon or midnight",
+      "Don't use ordinal suffixes on dates (28, not 28th)",
+      "Don't use unapproved emojis in external communications",
+      "Don't abbreviate books of the Bible (Galatians, not Gal.)",
+      "Don't stretch, recolor outside the palette, or alter the logos"
+    ]
+  },
+  "related_docs": {
+    "style_guide": "https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-communications-style-guide.md",
+    "terminology": "https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-terminology.md",
+    "org_profile": "https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-org-profile.md",
+    "brand_pdf": "https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/assets/The-Ark-Church-Brand-2025.pdf",
+    "human_review_page": "https://raw.githubusercontent.com/The-Ark-Church/Agent-Instructions/main/knowledge-base/ark-brand-review.html"
+  }
+}
