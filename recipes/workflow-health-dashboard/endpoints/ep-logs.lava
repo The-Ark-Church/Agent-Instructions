@@ -1,0 +1,93 @@
+{%- comment -%}
+  workflow-health app | GET logs
+  Default: HTML fragment — WorkflowLog volume by type + completed workflows kept forever.
+  ?format=json : agent-readable JSON.
+  Enabled Lava Commands on this endpoint: Sql.
+  The grouped queries scan WorkflowLog (~1.4M rows) and Workflow (~250K rows); this panel
+  loads async via HTMX so it never blocks the page paint.
+{%- endcomment -%}
+{%- sql return:'totals' -%}
+SET NOCOUNT ON
+SELECT
+  (SELECT ISNULL(SUM([pt].[rows]), 0) FROM [sys].[partitions] AS [pt] WHERE [pt].[object_id] = OBJECT_ID('[dbo].[WorkflowLog]') AND [pt].[index_id] IN (0, 1)) AS [TotalLogRows],
+  (SELECT COUNT(*) FROM [Workflow] AS [w] JOIN [WorkflowType] AS [wt] ON [wt].[Id] = [w].[WorkflowTypeId] WHERE [w].[CompletedDateTime] IS NOT NULL AND ISNULL([wt].[CompletedWorkflowRetentionPeriod], 0) = 0) AS [TotalCompletedKeptForever]
+{%- endsql -%}
+{%- sql return:'logsByType' -%}
+SET NOCOUNT ON
+SELECT TOP 20
+  [wt].[Id],
+  [wt].[Name],
+  [wt].[LoggingLevel],
+  ISNULL([wt].[LogRetentionPeriod], 0) AS [LogRetentionDays],
+  COUNT(*) AS [LogRows]
+FROM [WorkflowLog] AS [wl]
+JOIN [Workflow] AS [w] ON [w].[Id] = [wl].[WorkflowId]
+JOIN [WorkflowType] AS [wt] ON [wt].[Id] = [w].[WorkflowTypeId]
+GROUP BY [wt].[Id], [wt].[Name], [wt].[LoggingLevel], [wt].[LogRetentionPeriod]
+ORDER BY COUNT(*) DESC
+{%- endsql -%}
+{%- sql return:'completedKept' -%}
+SET NOCOUNT ON
+SELECT TOP 15
+  [wt].[Id],
+  [wt].[Name],
+  ISNULL([c].[Name], '') AS [Category],
+  COUNT(*) AS [CompletedKept],
+  CONVERT(VARCHAR(19), MAX([w].[CompletedDateTime]), 126) AS [NewestCompleted]
+FROM [Workflow] AS [w]
+JOIN [WorkflowType] AS [wt] ON [wt].[Id] = [w].[WorkflowTypeId]
+LEFT JOIN [Category] AS [c] ON [c].[Id] = [wt].[CategoryId]
+WHERE [w].[CompletedDateTime] IS NOT NULL
+  AND ISNULL([wt].[CompletedWorkflowRetentionPeriod], 0) = 0
+GROUP BY [wt].[Id], [wt].[Name], [c].[Name]
+ORDER BY COUNT(*) DESC
+{%- endsql -%}
+{%- assign totalsRow = totals | First -%}
+{%- if QueryString.format == 'json' -%}
+{"generatedAt":"{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}","totals":{{ totalsRow | ToJSON }},"logsByType":{{ logsByType | ToJSON }},"completedKeptForever":{{ completedKept | ToJSON }}}
+{%- else -%}
+<div class="row">
+  <div class="col-md-6">
+    <h5>Log Volume by Type <small>{{ totalsRow.TotalLogRows | Format:'#,##0' }} rows total</small></h5>
+    <table class="table table-condensed wfh-table">
+      <thead><tr><th>Workflow Type</th><th class="wfh-num">Log Rows</th><th>Logging</th></tr></thead>
+      <tbody>
+      {%- for row in logsByType -%}
+        <tr>
+          <td><a href="/admin/general/workflows?workflowTypeId={{ row.Id }}">{{ row.Name | Escape | Truncate:48 }}</a></td>
+          <td class="wfh-num">{{ row.LogRows | Format:'#,##0' }}</td>
+          <td>
+            {%- if row.LoggingLevel == 0 -%}
+              <span class="text-muted" title="Logging is now off; these rows are historical">off</span>
+            {%- elsif row.LogRetentionDays == 0 -%}
+              <span class="label label-warning" title="Logging level {{ row.LoggingLevel }} and logs kept forever">L{{ row.LoggingLevel }} &middot; keep &infin;</span>
+            {%- else -%}
+              <span class="label label-default">L{{ row.LoggingLevel }} &middot; {{ row.LogRetentionDays }}d</span>
+            {%- endif -%}
+          </td>
+        </tr>
+      {%- endfor -%}
+      </tbody>
+    </table>
+  </div>
+  <div class="col-md-6">
+    <h5>Completed Kept Forever <small>{{ totalsRow.TotalCompletedKeptForever | Format:'#,##0' }} instances, no retention set</small></h5>
+    <table class="table table-condensed wfh-table">
+      <thead><tr><th>Workflow Type</th><th class="wfh-num">Kept</th><th>Newest</th></tr></thead>
+      <tbody>
+      {%- for row in completedKept -%}
+        <tr>
+          <td>
+            <a href="/admin/general/workflows?workflowTypeId={{ row.Id }}" title="Set a Completed Workflow Retention Period on helper types; keep record-of-action types">{{ row.Name | Escape | Truncate:48 }}</a>
+            {%- if row.Category != '' %} <small class="text-muted">{{ row.Category | Escape }}</small>{% endif %}
+          </td>
+          <td class="wfh-num">{{ row.CompletedKept | Format:'#,##0' }}</td>
+          <td><small>{{ row.NewestCompleted }}</small></td>
+        </tr>
+      {%- endfor -%}
+      </tbody>
+    </table>
+    <p class="text-muted wfh-empty">Retention is a per-type call: purge helper workflows, keep record-of-action ones (signatures, approvals) and connection-tied ones.</p>
+  </div>
+</div>
+{%- endif -%}

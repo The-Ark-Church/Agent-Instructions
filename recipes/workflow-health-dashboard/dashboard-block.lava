@@ -1,0 +1,121 @@
+{%- comment -%}
+  Workflow Health Dashboard shell (Lava Application Content block on the dashboard page).
+  Panels lazy-load via HTMX from the workflow-health Lava application; each endpoint
+  also serves agent JSON with ?format=json. No enabled Lava commands needed here —
+  the endpoints declare their own Sql.
+  Single-row writes (expire, unstick, type hygiene) call the v1 REST API as the
+  signed-in admin; the bulk sweep POSTs to the secured action-sweep endpoint.
+{%- endcomment -%}
+<style>
+  .wfh-toolbar { margin-bottom: 12px; }
+  .wfh-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 8px; }
+  .wfh-kpi { display: block; padding: 12px 14px; border: 1px solid rgba(128,128,128,.25); border-left: 4px solid var(--wfh-c, #64748b); border-radius: 6px; text-decoration: none; color: inherit; }
+  .wfh-kpi:hover { text-decoration: none; border-color: rgba(128,128,128,.5); }
+  .wfh-kpi-value { display: block; font-size: 1.45em; font-weight: 700; line-height: 1.2; }
+  .wfh-kpi-label { display: block; font-size: .78em; text-transform: uppercase; letter-spacing: .03em; opacity: .75; margin-top: 2px; }
+  .wfh-kpi-sub { display: block; font-size: .75em; opacity: .55; }
+  .wfh-neutral { --wfh-c: #64748b; }
+  .wfh-ok { --wfh-c: #16a34a; }
+  .wfh-warn { --wfh-c: #d97706; }
+  .wfh-bad { --wfh-c: #dc2626; }
+  .wfh-table th.wfh-num, .wfh-table td.wfh-num { text-align: right; white-space: nowrap; }
+  .wfh-table td.wfh-actions { white-space: nowrap; text-align: right; }
+  .wfh-table td.wfh-hygiene .label { margin-right: 4px; display: inline-block; margin-bottom: 2px; }
+  .wfh-row-stuck { background: rgba(220, 38, 38, .07); }
+  .wfh-pre { max-height: 130px; overflow: auto; font-size: 11px; white-space: pre-wrap; }
+  .wfh-jobmeta { font-size: .85em; opacity: .8; }
+  .wfh-empty { margin: 6px 0; }
+  #wfh-action-result .alert { margin-bottom: 12px; }
+</style>
+
+<div class="wfh-toolbar">
+  <a class="btn btn-xs btn-default" href="/admin/general/workflows"><i class="fa fa-sitemap"></i> Workflow Configuration</a>
+  <a class="btn btn-xs btn-default" href="/page/__WFH_INSTANCES_PAGE_ID__"><i class="fa fa-list"></i> All Instances (grid)</a>
+  <a class="btn btn-xs btn-default" href="/page/__WFH_JOBS_PAGE_ID__"><i class="fa fa-clock-o"></i> Jobs</a>
+  <button type="button" class="btn btn-xs btn-default pull-right" onclick="if (window.htmx) { htmx.trigger(document.body, 'wfh-refresh'); }"><i class="fa fa-refresh"></i> Refresh all</button>
+</div>
+
+<div id="wfh-action-result"></div>
+
+<div hx-get="/api/v2/lava-app/1/workflow-health/summary" hx-trigger="load, every 120s, wfh-refresh from:body" hx-swap="innerHTML">
+  <span class="text-muted">Loading health summary&hellip;</span>
+</div>
+
+<div class="panel panel-block" id="wfh-engine-panel">
+  <div class="panel-heading"><h1 class="panel-title"><i class="fa fa-cogs"></i> Engine Health</h1></div>
+  <div class="panel-body" hx-get="/api/v2/lava-app/1/workflow-health/engine" hx-trigger="load, every 120s, wfh-refresh from:body" hx-swap="innerHTML">
+    <span class="text-muted">Loading engine status&hellip;</span>
+  </div>
+</div>
+
+<div class="panel panel-block" id="wfh-types-panel">
+  <div class="panel-heading"><h1 class="panel-title"><i class="fa fa-sitemap"></i> Active Workflow Types</h1></div>
+  <div class="panel-body" hx-get="/api/v2/lava-app/1/workflow-health/types" hx-trigger="load, wfh-refresh from:body" hx-swap="innerHTML">
+    <span class="text-muted">Loading types&hellip;</span>
+  </div>
+</div>
+
+<div class="panel panel-block" id="wfh-instances-panel">
+  <div class="panel-heading">
+    <h1 class="panel-title"><i class="fa fa-hourglass-half"></i> Longest-Running Instances</h1>
+    <div class="panel-labels"><a class="btn btn-xs btn-link" href="/page/__WFH_INSTANCES_PAGE_ID__">full list <i class="fa fa-chevron-right"></i></a></div>
+  </div>
+  <div class="panel-body" hx-get="/api/v2/lava-app/1/workflow-health/instances?top=25" hx-trigger="load, wfh-refresh from:body" hx-swap="innerHTML">
+    <span class="text-muted">Loading instances&hellip;</span>
+  </div>
+</div>
+
+<div class="panel panel-block" id="wfh-logs-panel">
+  <div class="panel-heading"><h1 class="panel-title"><i class="fa fa-database"></i> Logs &amp; Retention</h1></div>
+  <div class="panel-body" hx-get="/api/v2/lava-app/1/workflow-health/logs" hx-trigger="load, wfh-refresh from:body" hx-swap="innerHTML">
+    <span class="text-muted">Loading log stats&hellip;</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Helix endpoints require this header; add it to every htmx request from this page.
+  document.body.addEventListener('htmx:configRequest', function (e) {
+    e.detail.headers['X-Helix-CSRF-Protection'] = 'true';
+  });
+
+  function nowIso() {
+    var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+  }
+
+  function patch(url, body, btn, done) {
+    if (btn) { btn.disabled = true; }
+    fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body)
+    }).then(function (r) {
+      if (!r.ok) { return r.text().then(function (t) { throw new Error('HTTP ' + r.status + ' ' + t.substring(0, 200)); }); }
+      if (done) { done(); }
+      if (window.htmx) { htmx.trigger(document.body, 'wfh-refresh'); }
+    }).catch(function (err) {
+      alert('Action failed: ' + err.message);
+      if (btn) { btn.disabled = false; }
+    });
+  }
+
+  // Single-instance actions run as the signed-in admin via the v1 REST API (audited to you).
+  window.wfhCompleteWorkflow = function (id, btn) {
+    if (!confirm('Mark workflow ' + id + ' as Expired? This completes it.')) { return; }
+    patch('/api/Workflows/' + id, { Status: 'Expired', CompletedDateTime: nowIso(), IsProcessing: false }, btn);
+  };
+
+  window.wfhClearStuck = function (id, btn) {
+    if (!confirm('Clear the IsProcessing flag on workflow ' + id + ' so the engine retries it?')) { return; }
+    patch('/api/Workflows/' + id, { IsProcessing: false }, btn);
+  };
+
+  window.wfhSetTypeField = function (typeId, field, value, btn) {
+    if (!confirm('Set ' + field + ' = ' + value + ' on workflow type ' + typeId + '?')) { return; }
+    var body = {}; body[field] = value;
+    patch('/api/WorkflowTypes/' + typeId, body, btn);
+  };
+})();
+</script>

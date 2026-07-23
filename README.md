@@ -21,6 +21,7 @@ Read these first, in this order:
 | [`org-instructions/`](org-instructions/) | Claude Teams org-level instructions and profile (source of truth for what's pasted into the admin console) |
 | [`tools/`](tools/) | Setup guides for connecting tools to AI assistants |
 | [`skills/`](skills/) | Skills staff can install for their assistant |
+| [`recipes/`](recipes/) | Ready-to-deploy recipes for other systems — e.g. a [Workflow Health dashboard](recipes/workflow-health-dashboard/) for Rock RMS |
 
 ## Tool guides
 

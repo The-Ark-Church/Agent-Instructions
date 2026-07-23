@@ -1,0 +1,74 @@
+{%- comment -%}
+  workflow-health app | GET summary
+  Default: HTML KPI strip fragment (loaded by the dashboard page via HTMX).
+  ?format=json : agent-readable JSON.
+  Enabled Lava Commands on this endpoint: Sql.
+  Rock-written datetimes are Central; @Now uses RockDateTime, not GETDATE() (Azure SQL = UTC).
+  Stuck = IsProcessing for over an hour (momentary IsProcessing during engine runs is normal).
+{%- endcomment -%}
+{%- sql -%}
+SET NOCOUNT ON
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+SELECT
+  (SELECT COUNT(*) FROM [Workflow] WHERE [CompletedDateTime] IS NULL) AS [ActiveTotal],
+  (SELECT COUNT(DISTINCT [WorkflowTypeId]) FROM [Workflow] WHERE [CompletedDateTime] IS NULL) AS [ActiveTypes],
+  (SELECT COUNT(*) FROM [Workflow] WHERE [CompletedDateTime] IS NULL AND [IsProcessing] = 1 AND ([LastProcessedDateTime] IS NULL OR [LastProcessedDateTime] < DATEADD(HOUR, -1, @Now))) AS [StuckProcessing],
+  (SELECT COUNT(*) FROM [Workflow] WHERE [CompletedDateTime] IS NULL AND [ActivatedDateTime] < DATEADD(DAY, -90, @Now)) AS [ActiveOver90Days],
+  (SELECT ISNULL(SUM([pt].[rows]), 0) FROM [sys].[partitions] AS [pt] WHERE [pt].[object_id] = OBJECT_ID('[dbo].[WorkflowLog]') AND [pt].[index_id] IN (0, 1)) AS [WorkflowLogRows],
+  (SELECT COUNT(*) FROM [Workflow] AS [w] JOIN [WorkflowType] AS [wt] ON [wt].[Id] = [w].[WorkflowTypeId] WHERE [w].[CompletedDateTime] IS NOT NULL AND ISNULL([wt].[CompletedWorkflowRetentionPeriod], 0) = 0) AS [CompletedKeptForever],
+  (SELECT ISNULL([sj].[LastStatus], '') FROM [ServiceJob] AS [sj] WHERE [sj].[Class] = 'Rock.Jobs.ProcessWorkflows') AS [EngineLastStatus],
+  (SELECT CONVERT(VARCHAR(19), [sj].[LastRunDateTime], 126) FROM [ServiceJob] AS [sj] WHERE [sj].[Class] = 'Rock.Jobs.ProcessWorkflows') AS [EngineLastRunDateTime],
+  (SELECT ISNULL([sj].[LastStatusMessage], '') FROM [ServiceJob] AS [sj] WHERE [sj].[Class] = 'Rock.Jobs.ProcessWorkflows') AS [EngineLastStatusMessage]
+{%- endsql -%}
+{%- assign kpis = results | First -%}
+{%- comment -%} Fluid pitfall: backslash classes like \d in filter args break the tag parser — use [0-9]. {%- endcomment -%}
+{%- assign engineErrorCount = 0 -%}
+{%- assign matched = kpis.EngineLastStatusMessage | RegExMatchValue:'[0-9]+ workflows reported an error' | RegExMatchValue:'[0-9]+' -%}
+{%- if matched and matched != '' -%}{%- assign engineErrorCount = matched | AsInteger -%}{%- endif -%}
+{%- if QueryString.format == 'json' -%}
+{"generatedAt":"{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}","engineErrorCount":{{ engineErrorCount }},"kpis":{{ kpis | ToJSON }}}
+{%- else -%}
+{%- assign stuckClass = 'wfh-ok' -%}
+{%- if kpis.StuckProcessing > 0 -%}{%- assign stuckClass = 'wfh-bad' -%}{%- endif -%}
+{%- assign oldClass = 'wfh-ok' -%}
+{%- if kpis.ActiveOver90Days >= 25 -%}{%- assign oldClass = 'wfh-bad' -%}{%- elsif kpis.ActiveOver90Days > 0 -%}{%- assign oldClass = 'wfh-warn' -%}{%- endif -%}
+{%- assign engineClass = 'wfh-ok' -%}{%- assign engineText = 'Healthy' -%}
+{%- if kpis.EngineLastStatus != 'Success' -%}{%- assign engineClass = 'wfh-bad' -%}{%- assign engineText = kpis.EngineLastStatus -%}
+{%- elsif engineErrorCount > 0 -%}{%- assign engineClass = 'wfh-warn' -%}{%- assign engineText = engineErrorCount | Append:' error(s)' -%}{%- endif -%}
+{%- assign logClass = 'wfh-neutral' -%}
+{%- if kpis.WorkflowLogRows >= 5000000 -%}{%- assign logClass = 'wfh-bad' -%}{%- elsif kpis.WorkflowLogRows >= 1000000 -%}{%- assign logClass = 'wfh-warn' -%}{%- endif -%}
+{%- assign keptClass = 'wfh-neutral' -%}
+{%- if kpis.CompletedKeptForever >= 50000 -%}{%- assign keptClass = 'wfh-bad' -%}{%- elsif kpis.CompletedKeptForever >= 10000 -%}{%- assign keptClass = 'wfh-warn' -%}{%- endif -%}
+<div class="wfh-kpis">
+  <a class="wfh-kpi wfh-neutral" href="/page/__WFH_INSTANCES_PAGE_ID__">
+    <span class="wfh-kpi-value">{{ kpis.ActiveTotal | Format:'#,##0' }}</span>
+    <span class="wfh-kpi-label">Active Workflows</span>
+    <span class="wfh-kpi-sub">{{ kpis.ActiveTypes }} types</span>
+  </a>
+  <a class="wfh-kpi {{ stuckClass }}" href="/page/__WFH_INSTANCES_PAGE_ID__?StuckOnly=1">
+    <span class="wfh-kpi-value">{{ kpis.StuckProcessing | Format:'#,##0' }}</span>
+    <span class="wfh-kpi-label">Stuck Processing</span>
+    <span class="wfh-kpi-sub">IsProcessing &gt; 1 hour</span>
+  </a>
+  <a class="wfh-kpi {{ oldClass }}" href="/page/__WFH_INSTANCES_PAGE_ID__?MinAgeDays=90">
+    <span class="wfh-kpi-value">{{ kpis.ActiveOver90Days | Format:'#,##0' }}</span>
+    <span class="wfh-kpi-label">Active &gt; 90 Days</span>
+    <span class="wfh-kpi-sub">candidates to sweep</span>
+  </a>
+  <a class="wfh-kpi {{ engineClass }}" href="#wfh-engine-panel">
+    <span class="wfh-kpi-value">{{ engineText }}</span>
+    <span class="wfh-kpi-label">Engine (last run)</span>
+    <span class="wfh-kpi-sub">{{ kpis.EngineLastRunDateTime | HumanizeDateTime }}</span>
+  </a>
+  <a class="wfh-kpi {{ logClass }}" href="#wfh-logs-panel">
+    <span class="wfh-kpi-value">{{ kpis.WorkflowLogRows | Format:'#,##0' }}</span>
+    <span class="wfh-kpi-label">Workflow Log Rows</span>
+    <span class="wfh-kpi-sub">table size driver</span>
+  </a>
+  <a class="wfh-kpi {{ keptClass }}" href="#wfh-logs-panel">
+    <span class="wfh-kpi-value">{{ kpis.CompletedKeptForever | Format:'#,##0' }}</span>
+    <span class="wfh-kpi-label">Completed Kept Forever</span>
+    <span class="wfh-kpi-sub">no retention configured</span>
+  </a>
+</div>
+{%- endif -%}

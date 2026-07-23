@@ -1,0 +1,120 @@
+{%- comment -%}
+  workflow-health app | GET instances
+  Default: HTML table fragment of active workflow instances, oldest first.
+  ?format=json : agent-readable JSON.
+  Query params (all optional integers, coerced with AsInteger so injection is impossible):
+    top (default 25, max 500), minagedays, workflowtypeid, stuckonly (0/1),
+    personid (PersonId; matches workflows the person INITIATED or is currently ASSIGNED to
+    via an open activity — any of the person's aliases)
+  Enabled Lava Commands on this endpoint: Sql.
+{%- endcomment -%}
+{%- assign pTop = QueryString.top | Default:'25' | AsInteger | Default:25 -%}
+{%- assign pMinAge = QueryString.minagedays | Default:'0' | AsInteger | Default:0 -%}
+{%- assign pTypeId = QueryString.workflowtypeid | Default:'0' | AsInteger | Default:0 -%}
+{%- assign pStuck = QueryString.stuckonly | Default:'0' | AsInteger | Default:0 -%}
+{%- assign pPersonId = QueryString.personid | Default:'0' | AsInteger | Default:0 -%}
+{%- if pTop > 500 -%}{%- assign pTop = 500 -%}{%- endif -%}
+{%- if pTop < 1 -%}{%- assign pTop = 25 -%}{%- endif -%}
+{%- sql -%}
+SET NOCOUNT ON
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+SELECT TOP ({{ pTop }})
+  [w].[Id],
+  [w].[Guid],
+  [w].[WorkflowTypeId],
+  [wt].[Name] AS [WorkflowTypeName],
+  ISNULL([w].[Name], '') AS [Name],
+  ISNULL([w].[Status], '') AS [Status],
+  [w].[IsProcessing],
+  CASE WHEN [w].[IsProcessing] = 1 AND ([w].[LastProcessedDateTime] IS NULL OR [w].[LastProcessedDateTime] < DATEADD(HOUR, -1, @Now)) THEN 1 ELSE 0 END AS [IsStuck],
+  CONVERT(VARCHAR(19), [w].[ActivatedDateTime], 126) AS [ActivatedDateTime],
+  DATEDIFF(DAY, [w].[ActivatedDateTime], @Now) AS [AgeDays],
+  CONVERT(VARCHAR(19), [w].[LastProcessedDateTime], 126) AS [LastProcessedDateTime],
+  ISNULL([p].[NickName] + ' ' + [p].[LastName], '') AS [InitiatorName],
+  ISNULL([p].[Id], 0) AS [InitiatorPersonId],
+  ISNULL((SELECT TOP 1 [wat].[Name]
+          FROM [WorkflowActivity] AS [wa]
+          JOIN [WorkflowActivityType] AS [wat] ON [wat].[Id] = [wa].[ActivityTypeId]
+          WHERE [wa].[WorkflowId] = [w].[Id] AND [wa].[CompletedDateTime] IS NULL
+          ORDER BY [wa].[ActivatedDateTime] DESC), '') AS [CurrentActivity],
+  ISNULL((SELECT TOP 1 ISNULL([ap].[NickName] + ' ' + [ap].[LastName], [ag].[Name])
+          FROM [WorkflowActivity] AS [wa2]
+          LEFT JOIN [PersonAlias] AS [apa] ON [apa].[Id] = [wa2].[AssignedPersonAliasId]
+          LEFT JOIN [Person] AS [ap] ON [ap].[Id] = [apa].[PersonId]
+          LEFT JOIN [Group] AS [ag] ON [ag].[Id] = [wa2].[AssignedGroupId]
+          WHERE [wa2].[WorkflowId] = [w].[Id] AND [wa2].[CompletedDateTime] IS NULL
+          ORDER BY [wa2].[ActivatedDateTime] DESC), '') AS [AssignedTo]
+FROM [Workflow] AS [w]
+JOIN [WorkflowType] AS [wt] ON [wt].[Id] = [w].[WorkflowTypeId]
+LEFT JOIN [PersonAlias] AS [pa] ON [pa].[Id] = [w].[InitiatorPersonAliasId]
+LEFT JOIN [Person] AS [p] ON [p].[Id] = [pa].[PersonId]
+WHERE [w].[CompletedDateTime] IS NULL
+{%- if pTypeId > 0 %}
+  AND [w].[WorkflowTypeId] = {{ pTypeId }}
+{%- endif %}
+{%- if pMinAge > 0 %}
+  AND [w].[ActivatedDateTime] < DATEADD(DAY, -{{ pMinAge }}, @Now)
+{%- endif %}
+{%- if pStuck == 1 %}
+  AND [w].[IsProcessing] = 1 AND ([w].[LastProcessedDateTime] IS NULL OR [w].[LastProcessedDateTime] < DATEADD(HOUR, -1, @Now))
+{%- endif %}
+{%- if pPersonId > 0 %}
+  AND ([w].[InitiatorPersonAliasId] IN (SELECT [pa2].[Id] FROM [PersonAlias] AS [pa2] WHERE [pa2].[PersonId] = {{ pPersonId }})
+       OR EXISTS (SELECT 1 FROM [WorkflowActivity] AS [waP]
+                  WHERE [waP].[WorkflowId] = [w].[Id] AND [waP].[CompletedDateTime] IS NULL
+                    AND [waP].[AssignedPersonAliasId] IN (SELECT [pa3].[Id] FROM [PersonAlias] AS [pa3] WHERE [pa3].[PersonId] = {{ pPersonId }})))
+{%- endif %}
+ORDER BY [w].[ActivatedDateTime] ASC
+{%- endsql -%}
+{%- if QueryString.format == 'json' -%}
+{"generatedAt":"{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}","filters":{"top":{{ pTop }},"minAgeDays":{{ pMinAge }},"workflowTypeId":{{ pTypeId }},"stuckOnly":{{ pStuck }},"personId":{{ pPersonId }}},"rows":{{ results | ToJSON }}}
+{%- else -%}
+{%- assign rowCount = results | Size -%}
+{%- if rowCount == 0 -%}
+<p class="text-muted wfh-empty">No active instances match{% if pTypeId > 0 or pMinAge > 0 or pStuck == 1 %} these filters{% endif %}.</p>
+{%- else -%}
+<table class="table table-condensed wfh-table">
+  <thead>
+    <tr>
+      <th>Id</th>
+      <th>Type</th>
+      <th>Instance</th>
+      <th class="wfh-num">Age</th>
+      <th>Last Processed</th>
+      <th>Initiator</th>
+      <th>Assigned</th>
+      <th>Waiting In</th>
+      <th class="wfh-actions">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {%- for row in results -%}
+    <tr{% if row.IsStuck == 1 %} class="wfh-row-stuck"{% endif %}>
+      <td><a href="/Workflow/{{ row.Id }}">{{ row.Id }}</a></td>
+      <td><a href="/admin/general/workflows?workflowTypeId={{ row.WorkflowTypeId }}">{{ row.WorkflowTypeName | Escape }}</a></td>
+      <td>{{ row.Name | Escape | Truncate:60 }} {% if row.IsStuck == 1 %}<span class="label label-danger" title="IsProcessing for over an hour — the engine is not going to pick this up">stuck</span>{% endif %}</td>
+      <td class="wfh-num">
+        {%- if row.AgeDays > 90 -%}<span class="label label-danger" title="Activated {{ row.ActivatedDateTime }}">{{ row.AgeDays }}d</span>
+        {%- elsif row.AgeDays > 30 -%}<span class="label label-warning" title="Activated {{ row.ActivatedDateTime }}">{{ row.AgeDays }}d</span>
+        {%- else -%}<span title="Activated {{ row.ActivatedDateTime }}">{{ row.AgeDays }}d</span>{%- endif -%}
+      </td>
+      <td><small>{{ row.LastProcessedDateTime | Default:'never' }}</small></td>
+      <td>{% if row.InitiatorPersonId > 0 %}<a href="/Person/{{ row.InitiatorPersonId }}">{{ row.InitiatorName | Escape }}</a>{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+      <td><small>{{ row.AssignedTo | Escape | Truncate:30 | Default:'—' }}</small></td>
+      <td><small>{{ row.CurrentActivity | Escape | Truncate:40 | Default:'—' }}</small></td>
+      <td class="wfh-actions">
+        <a class="btn btn-xs btn-default" title="Open workflow" href="/Workflow/{{ row.Id }}"><i class="fa fa-external-link"></i></a>
+        <button type="button" class="btn btn-xs btn-warning" title="Mark this workflow Expired (completes it)" onclick="wfhCompleteWorkflow({{ row.Id }}, this)"><i class="fa fa-check"></i> Expire</button>
+        {%- if row.IsStuck == 1 %}
+        <button type="button" class="btn btn-xs btn-danger" title="Clear the IsProcessing flag so the engine picks it up again" onclick="wfhClearStuck({{ row.Id }}, this)"><i class="fa fa-unlock"></i> Unstick</button>
+        {%- endif %}
+      </td>
+    </tr>
+  {%- endfor -%}
+  </tbody>
+</table>
+{%- if rowCount >= pTop -%}
+<p class="text-muted wfh-empty">Showing the oldest {{ pTop }}. <a href="/page/__WFH_INSTANCES_PAGE_ID__">See the full list</a>.</p>
+{%- endif -%}
+{%- endif -%}
+{%- endif -%}

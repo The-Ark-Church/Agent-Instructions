@@ -1,0 +1,65 @@
+{%- comment -%}
+  workflow-health app | POST action-sweep
+  Marks active instances of one workflow type older than N days as Expired.
+  Form fields: workflowtypeid (required), minagedays (default 90, floor 30).
+  Security: ApplicationView mode — the app's ExecuteView (RSR - Rock Administration only).
+  NOTE: if the application's ExecuteView is ever granted more broadly (e.g. staff read access),
+  flip this endpoint to EndpointExecute (mode 0) first — its Execute allow/deny Auth rows exist.
+  Enabled Lava Commands on this endpoint: Sql.
+  Safety: integer-coerced params; preview count first; hard cap of 500 rows via UPDATE TOP;
+  audit columns stamped with the caller (CurrentPerson). Same pattern as the 2026-06-11
+  manual sweep. Note: like that sweep, this completes the workflow row itself and clears
+  IsProcessing; it does not back-fill activity completion (accepted precedent).
+{%- endcomment -%}
+{%- assign pTypeId = Form.workflowtypeid | Default:'0' | AsInteger | Default:0 -%}
+{%- assign pMinAge = Form.minagedays | Default:'90' | AsInteger | Default:90 -%}
+{%- if pMinAge < 30 -%}{%- assign pMinAge = 30 -%}{%- endif -%}
+{%- if pTypeId <= 0 -%}
+<div class="alert alert-danger">action-sweep: <code>workflowtypeid</code> is required.</div>
+{%- else -%}
+{%- assign auditAliasId = 'NULL' -%}
+{%- if CurrentPerson and CurrentPerson.PrimaryAliasId -%}{%- assign auditAliasId = CurrentPerson.PrimaryAliasId -%}{%- endif -%}
+{%- sql return:'typecheck' -%}
+SET NOCOUNT ON
+SELECT [wt].[Name] FROM [WorkflowType] AS [wt] WHERE [wt].[Id] = {{ pTypeId }}
+{%- endsql -%}
+{%- assign typeRow = typecheck | First -%}
+{%- if typeRow == null -%}
+<div class="alert alert-danger">action-sweep: workflow type {{ pTypeId }} does not exist.</div>
+{%- else -%}
+{%- sql return:'preview' -%}
+SET NOCOUNT ON
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+SELECT COUNT(*) AS [Cnt]
+FROM [Workflow] AS [w]
+WHERE [w].[WorkflowTypeId] = {{ pTypeId }}
+  AND [w].[CompletedDateTime] IS NULL
+  AND [w].[ActivatedDateTime] < DATEADD(DAY, -{{ pMinAge }}, @Now)
+{%- endsql -%}
+{%- assign expected = preview | First -%}
+{%- if expected.Cnt == 0 -%}
+<div class="alert alert-info">Nothing to sweep: no active <strong>{{ typeRow.Name | Escape }}</strong> instances older than {{ pMinAge }} days.</div>
+{%- elsif expected.Cnt > 500 -%}
+<div class="alert alert-danger">{{ expected.Cnt }} matching instances exceeds the 500-row safety cap. Run this as a reviewed SQL script instead.</div>
+{%- else -%}
+{%- sql statement:'command' return:'updatedCount' -%}
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+UPDATE TOP (500) [Workflow]
+SET [Status] = 'Expired',
+    [CompletedDateTime] = @Now,
+    [IsProcessing] = 0,
+    [ModifiedDateTime] = @Now,
+    [ModifiedByPersonAliasId] = {{ auditAliasId }}
+WHERE [WorkflowTypeId] = {{ pTypeId }}
+  AND [CompletedDateTime] IS NULL
+  AND [ActivatedDateTime] < DATEADD(DAY, -{{ pMinAge }}, @Now)
+{%- endsql -%}
+<div class="alert alert-success">
+  <strong>Sweep complete:</strong> {{ updatedCount }} instance(s) of <strong>{{ typeRow.Name | Escape }}</strong> older than {{ pMinAge }} days marked Expired
+  (expected {{ expected.Cnt }}).
+  To undo, filter [Workflow] on ModifiedDateTime = this run and set Status back to Active with CompletedDateTime = NULL.
+</div>
+<script>if (window.htmx) { htmx.trigger(document.body, 'wfh-refresh'); }</script>
+{%- endif -%}
+{%- endif -%}
+{%- endif -%}

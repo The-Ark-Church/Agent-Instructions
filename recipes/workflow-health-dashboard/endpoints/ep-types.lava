@@ -1,0 +1,113 @@
+{%- comment -%}
+  workflow-health app | GET types
+  Default: HTML table fragment of active workflow types with hygiene flags and actions.
+  ?format=json : agent-readable JSON.
+  Enabled Lava Commands on this endpoint: Sql.
+  Flags encode a general workflow-type lifecycle policy:
+    FlagStaleNoMaxAge         = 90+ day-old instances and no auto-expiry configured
+    FlagLoggingNoRetention    = logging on with no log retention period
+    FlagKeepsCompletedForever = no completed retention and over 1,000 completed rows kept
+    FlagStuck                 = instances stuck IsProcessing for over an hour
+  One-click fixes are offered ONLY for log retention (always safe). Completed retention and
+  max age are per-type judgment calls (record-of-action types must keep; long-lived forms
+  must not auto-expire) so those flags link to the type editor instead.
+{%- endcomment -%}
+{%- sql -%}
+SET NOCOUNT ON
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+SELECT
+  [wt].[Id],
+  [wt].[Name],
+  ISNULL([c].[Name], '') AS [Category],
+  COUNT([w].[Id]) AS [ActiveCount],
+  CONVERT(VARCHAR(19), MIN([w].[ActivatedDateTime]), 126) AS [OldestActivatedDateTime],
+  DATEDIFF(DAY, MIN([w].[ActivatedDateTime]), @Now) AS [OldestAgeDays],
+  SUM(CASE WHEN [w].[ActivatedDateTime] < DATEADD(DAY, -90, @Now) THEN 1 ELSE 0 END) AS [ActiveOver90Days],
+  SUM(CASE WHEN [w].[IsProcessing] = 1 AND ([w].[LastProcessedDateTime] IS NULL OR [w].[LastProcessedDateTime] < DATEADD(HOUR, -1, @Now)) THEN 1 ELSE 0 END) AS [StuckProcessing],
+  [wt].[LoggingLevel],
+  ISNULL([wt].[LogRetentionPeriod], 0) AS [LogRetentionDays],
+  ISNULL([wt].[CompletedWorkflowRetentionPeriod], 0) AS [CompletedRetentionDays],
+  ISNULL([wt].[MaxWorkflowAgeDays], 0) AS [MaxWorkflowAgeDays],
+  (SELECT COUNT(*) FROM [Workflow] AS [wc] WHERE [wc].[WorkflowTypeId] = [wt].[Id] AND [wc].[CompletedDateTime] IS NOT NULL) AS [CompletedCount],
+  CASE WHEN SUM(CASE WHEN [w].[ActivatedDateTime] < DATEADD(DAY, -90, @Now) THEN 1 ELSE 0 END) > 0
+        AND ISNULL([wt].[MaxWorkflowAgeDays], 0) = 0 THEN 1 ELSE 0 END AS [FlagStaleNoMaxAge],
+  CASE WHEN [wt].[LoggingLevel] > 0 AND ISNULL([wt].[LogRetentionPeriod], 0) = 0 THEN 1 ELSE 0 END AS [FlagLoggingNoRetention],
+  CASE WHEN ISNULL([wt].[CompletedWorkflowRetentionPeriod], 0) = 0
+        AND (SELECT COUNT(*) FROM [Workflow] AS [wc2] WHERE [wc2].[WorkflowTypeId] = [wt].[Id] AND [wc2].[CompletedDateTime] IS NOT NULL) > 1000 THEN 1 ELSE 0 END AS [FlagKeepsCompletedForever],
+  CASE WHEN SUM(CASE WHEN [w].[IsProcessing] = 1 AND ([w].[LastProcessedDateTime] IS NULL OR [w].[LastProcessedDateTime] < DATEADD(HOUR, -1, @Now)) THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END AS [FlagStuck]
+FROM [WorkflowType] AS [wt]
+LEFT JOIN [Category] AS [c] ON [c].[Id] = [wt].[CategoryId]
+JOIN [Workflow] AS [w] ON [w].[WorkflowTypeId] = [wt].[Id] AND [w].[CompletedDateTime] IS NULL
+GROUP BY [wt].[Id], [wt].[Name], [c].[Name], [wt].[LoggingLevel], [wt].[LogRetentionPeriod], [wt].[CompletedWorkflowRetentionPeriod], [wt].[MaxWorkflowAgeDays]
+ORDER BY COUNT([w].[Id]) DESC
+{%- endsql -%}
+{%- if QueryString.format == 'json' -%}
+{"generatedAt":"{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}","rows":{{ results | ToJSON }}}
+{%- else -%}
+<table class="table table-condensed wfh-table">
+  <thead>
+    <tr>
+      <th>Workflow Type</th>
+      <th class="wfh-num">Active</th>
+      <th class="wfh-num">Oldest</th>
+      <th class="wfh-num">&gt;90d</th>
+      <th class="wfh-num">Stuck</th>
+      <th>Hygiene</th>
+      <th class="wfh-actions">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {%- for row in results -%}
+    <tr>
+      <td>
+        <a href="/admin/general/workflows?workflowTypeId={{ row.Id }}"><strong>{{ row.Name | Escape }}</strong></a>
+        {%- if row.Category != '' %} <small class="text-muted">{{ row.Category | Escape }}</small>{% endif %}
+      </td>
+      <td class="wfh-num"><a href="/page/__WFH_INSTANCES_PAGE_ID__?WorkflowTypeId={{ row.Id }}">{{ row.ActiveCount }}</a></td>
+      <td class="wfh-num">
+        {%- if row.OldestAgeDays > 90 -%}<span class="label label-danger" title="{{ row.OldestActivatedDateTime }}">{{ row.OldestAgeDays }}d</span>
+        {%- elsif row.OldestAgeDays > 30 -%}<span class="label label-warning" title="{{ row.OldestActivatedDateTime }}">{{ row.OldestAgeDays }}d</span>
+        {%- else -%}<span title="{{ row.OldestActivatedDateTime }}">{{ row.OldestAgeDays }}d</span>{%- endif -%}
+      </td>
+      <td class="wfh-num">{% if row.ActiveOver90Days > 0 %}<span class="label label-warning">{{ row.ActiveOver90Days }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+      <td class="wfh-num">{% if row.StuckProcessing > 0 %}<span class="label label-danger">{{ row.StuckProcessing }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+      <td class="wfh-hygiene">
+        {%- if row.LoggingLevel > 0 -%}
+          {%- if row.FlagLoggingNoRetention == 1 -%}
+            <span class="label label-warning" title="Logging level {{ row.LoggingLevel }} with no log retention — logs accumulate forever">log L{{ row.LoggingLevel }} &middot; keep &infin;</span>
+          {%- else -%}
+            <span class="label label-default" title="Logging level {{ row.LoggingLevel }}, retained {{ row.LogRetentionDays }} days">log L{{ row.LoggingLevel }} &middot; {{ row.LogRetentionDays }}d</span>
+          {%- endif -%}
+        {%- endif -%}
+        {%- if row.FlagKeepsCompletedForever == 1 -%}
+          <span class="label label-warning" title="{{ row.CompletedCount | Format:'#,##0' }} completed instances kept forever — set a Completed Workflow Retention Period if this is a helper workflow (per-type judgment: record-of-action types should keep)">{{ row.CompletedCount | Format:'#,##0' }} kept &infin;</span>
+        {%- elsif row.CompletedRetentionDays > 0 -%}
+          <span class="label label-default" title="Completed instances retained {{ row.CompletedRetentionDays }} days">keep {{ row.CompletedRetentionDays }}d</span>
+        {%- endif -%}
+        {%- if row.FlagStaleNoMaxAge == 1 -%}
+          <span class="label label-info" title="Has 90+ day-old instances and no Max Workflow Age — configure auto-expiry only if 'still open' can only mean 'abandoned' for this type">no auto-expiry</span>
+        {%- elsif row.MaxWorkflowAgeDays > 0 -%}
+          <span class="label label-default" title="Instances auto-expire after {{ row.MaxWorkflowAgeDays }} days">expire {{ row.MaxWorkflowAgeDays }}d</span>
+        {%- endif -%}
+      </td>
+      <td class="wfh-actions">
+        <a class="btn btn-xs btn-default" title="View these instances" href="/page/__WFH_INSTANCES_PAGE_ID__?WorkflowTypeId={{ row.Id }}"><i class="fa fa-list"></i></a>
+        <a class="btn btn-xs btn-default" title="Configure this workflow type" href="/admin/general/workflows?workflowTypeId={{ row.Id }}"><i class="fa fa-cog"></i></a>
+        {%- if row.FlagLoggingNoRetention == 1 %}
+        <button type="button" class="btn btn-xs btn-primary" title="Set Log Retention Period to 30 days" onclick="wfhSetTypeField({{ row.Id }}, 'LogRetentionPeriod', 30, this)">30d logs</button>
+        {%- endif %}
+        {%- if row.ActiveOver90Days > 0 %}
+        <button type="button" class="btn btn-xs btn-danger" title="Mark all instances of this type older than 90 days as Expired"
+                hx-post="/api/v2/lava-app/1/workflow-health/action-sweep"
+                hx-vals='{"workflowtypeid":"{{ row.Id }}","minagedays":"90"}'
+                hx-target="#wfh-action-result" hx-swap="innerHTML"
+                hx-confirm="Mark {{ row.ActiveOver90Days }} instance(s) of &quot;{{ row.Name | Escape }}&quot; older than 90 days as Expired?">
+          <i class="fa fa-broom"></i> Sweep 90d+
+        </button>
+        {%- endif %}
+      </td>
+    </tr>
+  {%- endfor -%}
+  </tbody>
+</table>
+{%- endif -%}

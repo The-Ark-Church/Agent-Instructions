@@ -1,0 +1,94 @@
+{%- comment -%}
+  workflow-health app | GET engine
+  Default: HTML fragment — workflow engine job status + recent workflow exceptions.
+  ?format=json : agent-readable JSON.
+  Enabled Lava Commands on this endpoint: Sql.
+  Jobs are matched by [Class] (portable across environments), never by hardcoded Id.
+{%- endcomment -%}
+{%- sql return:'jobs' -%}
+SET NOCOUNT ON
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+SELECT
+  [sj].[Id],
+  [sj].[Name],
+  [sj].[IsActive],
+  ISNULL([sj].[LastStatus], '') AS [LastStatus],
+  ISNULL([sj].[LastStatusMessage], '') AS [LastStatusMessage],
+  CONVERT(VARCHAR(19), [sj].[LastRunDateTime], 126) AS [LastRunDateTime],
+  DATEDIFF(DAY, [sj].[LastRunDateTime], @Now) AS [DaysSinceLastRun],
+  ISNULL([sj].[LastRunDurationSeconds], 0) AS [LastRunDurationSeconds],
+  [sj].[CronExpression],
+  [sj].[Class]
+FROM [ServiceJob] AS [sj]
+WHERE [sj].[Class] IN ('Rock.Jobs.ProcessWorkflows', 'Rock.Jobs.CompleteWorkflows')
+ORDER BY [sj].[Id]
+{%- endsql -%}
+{%- sql return:'exceptions' -%}
+SET NOCOUNT ON
+DECLARE @Now DATETIME = '{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}'
+SELECT TOP 20
+  [el].[Id],
+  CONVERT(VARCHAR(19), [el].[CreatedDateTime], 126) AS [CreatedDateTime],
+  ISNULL([el].[ExceptionType], '') AS [ExceptionType],
+  LEFT(ISNULL([el].[Description], ''), 400) AS [Description],
+  ISNULL([el].[PageUrl], '') AS [PageUrl]
+FROM [ExceptionLog] AS [el]
+WHERE [el].[CreatedDateTime] > DATEADD(DAY, -7, @Now)
+  AND ([el].[Description] LIKE '%workflow%' OR [el].[ExceptionType] LIKE '%Workflow%')
+ORDER BY [el].[CreatedDateTime] DESC
+{%- endsql -%}
+{%- assign engineJob = jobs | Where:'Class','Rock.Jobs.ProcessWorkflows' | First -%}
+{%- assign completeJob = jobs | Where:'Class','Rock.Jobs.CompleteWorkflows' | First -%}
+{%- comment -%} Fluid pitfall: backslash classes like \d in filter args break the tag parser — use [0-9]. {%- endcomment -%}
+{%- assign engineErrorCount = 0 -%}
+{%- assign matched = engineJob.LastStatusMessage | RegExMatchValue:'[0-9]+ workflows reported an error' | RegExMatchValue:'[0-9]+' -%}
+{%- if matched and matched != '' -%}{%- assign engineErrorCount = matched | AsInteger -%}{%- endif -%}
+{%- if QueryString.format == 'json' -%}
+{"generatedAt":"{{ 'Now' | Date:'yyyy-MM-ddTHH:mm:ss' }}","engineErrorCount":{{ engineErrorCount }},"jobs":{{ jobs | ToJSON }},"recentExceptions":{{ exceptions | ToJSON }}}
+{%- else -%}
+<div class="row">
+  <div class="col-md-6">
+    <h5>
+      Process Workflows
+      {% if engineJob.LastStatus == 'Success' %}<span class="label label-success">{{ engineJob.LastStatus }}</span>{% else %}<span class="label label-danger">{{ engineJob.LastStatus | Default:'no status' }}</span>{% endif %}
+      {% if engineErrorCount > 0 %}<span class="label label-warning">{{ engineErrorCount }} workflow error(s) last run</span>{% endif %}
+      {% if engineJob.IsActive != true %}<span class="label label-danger">job inactive</span>{% endif %}
+    </h5>
+    <p class="wfh-jobmeta">
+      Last run {{ engineJob.LastRunDateTime | HumanizeDateTime }} &middot; {{ engineJob.LastRunDurationSeconds }}s &middot; cron <code>{{ engineJob.CronExpression }}</code>
+      &middot; <a href="/page/__WFH_JOBS_PAGE_ID__">open Jobs page</a>
+    </p>
+    {%- if engineJob.LastStatusMessage != '' -%}
+    <pre class="wfh-pre">{{ engineJob.LastStatusMessage | Truncate:800 | Escape }}</pre>
+    {%- endif -%}
+    <h5>
+      Complete Workflows <small>(auto-expiry via Max Workflow Age)</small>
+      {% if completeJob.IsActive != true %}<span class="label label-danger">job inactive</span>{% endif %}
+      {% if completeJob.DaysSinceLastRun > 35 %}<span class="label label-warning" title="Types' Max Workflow Age only takes effect when this job runs">hasn't run in {{ completeJob.DaysSinceLastRun }} days</span>{% endif %}
+    </h5>
+    <p class="wfh-jobmeta">
+      Last run {{ completeJob.LastRunDateTime | HumanizeDateTime | Default:'never' }} &middot; cron <code>{{ completeJob.CronExpression }}</code>
+    </p>
+  </div>
+  <div class="col-md-6">
+    <h5>Workflow-Related Exceptions <small>last 7 days</small></h5>
+    {%- assign excCount = exceptions | Size -%}
+    {%- if excCount == 0 -%}
+    <p class="text-muted wfh-empty">None. Clean week.</p>
+    {%- else -%}
+    <table class="table table-condensed wfh-table">
+      <thead><tr><th>When</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+      {%- for ex in exceptions -%}
+        <tr>
+          <td><small title="{{ ex.CreatedDateTime }}">{{ ex.CreatedDateTime | HumanizeDateTime }}</small></td>
+          <td><small>{{ ex.ExceptionType | Split:'.' | Last | Escape }}</small></td>
+          <td><small>{{ ex.Description | Truncate:140 | Escape }}</small></td>
+        </tr>
+      {%- endfor -%}
+      </tbody>
+    </table>
+    {%- endif -%}
+  </div>
+</div>
+{%- endif -%}
