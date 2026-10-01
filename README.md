@@ -1,6 +1,6 @@
 # Agent-Instructions — The Ark Church AI Knowledge Base
 
-The home base for AI at The Ark Church. This repo holds everything an AI assistant needs to know about who The Ark is, how we communicate, and what our brand looks like — plus setup guides and skills for staff.
+The home base for AI at The Ark Church. This repo holds everything an AI assistant needs to know about who The Ark is, how we communicate, and what our brand looks like — plus skills for staff.
 
 **No secrets, tokens, or passwords are stored in this repo** — credentials always stay on your own machine.
 
@@ -19,15 +19,14 @@ Read these first, in this order:
 |---|---|
 | [`knowledge-base/`](knowledge-base/) | Org profile, brand kit, style guide, terminology, brand review page, and all brand assets (logos, elements, vector sources) |
 | [`org-instructions/`](org-instructions/) | Claude Teams org-level instructions and profile (source of truth for what's pasted into the admin console) |
-| [`tools/`](tools/) | Setup guides for connecting tools to AI assistants |
 | [`skills/`](skills/) | Skills staff can install for their assistant |
 | [`recipes/`](recipes/) | Ready-to-deploy recipes for other systems — e.g. a [Workflow Health dashboard](recipes/workflow-health-dashboard/) for Rock RMS |
 
-## Tool guides
+## Connecting tools
 
-| Guide | What it does |
+| Tool | How staff connect it |
 |---|---|
-| [**basecamp-mcp**](tools/basecamp-mcp/README.md) | Connect **Basecamp** to your assistant via MCP — browse projects, manage todos, search, message boards, card tables, and more. Includes a [copy-paste agent install prompt](tools/basecamp-mcp/AGENT_INSTALL.md). |
+| **Basecamp** | In the Claude desktop app, open the **Code** tab and say **"set up Basecamp."** The [`set-up-basecamp`](skills/set-up-basecamp/) skill installs 37signals' official Basecamp CLI (no admin rights needed), signs you in, and connects Basecamp to Claude. Afterward it works in Code, regular chat, and Cowork. |
 
 ## For humans
 

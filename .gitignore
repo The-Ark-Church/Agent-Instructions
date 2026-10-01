@@ -1,7 +1,10 @@
-# Never commit secrets — guard against accidental adds if the server is cloned nearby
+# Never commit secrets or credentials
 .env
 *.env
-oauth_tokens.json
-**/oauth_tokens.json
+*token*.json
+credentials.json
+
+# Local junk
+.DS_Store
 venv/
 __pycache__/
