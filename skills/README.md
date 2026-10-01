@@ -9,6 +9,7 @@ Skills The Ark Church staff can install for their AI assistant.
 | [`write-like-me`](write-like-me/) | ✅ Available | Ghostwrites in your personal voice, with the Ark style guide always applied on top |
 | [`action-method`](action-method/) | ✅ Available | Coaches proposals, decision requests, and upward communication into rigorous structure (Wes Kao's framework) |
 | [`ark-brand`](ark-brand/) | ✅ Available | Produces Ark-branded PDFs and documents automatically — Ark palette, Smile Logo, Montserrat — when no styling is specified; pairs with `ark-writing-coach` (words vs. look) |
+| [`set-up-basecamp`](set-up-basecamp/) | ✅ Available | Connects Basecamp to Claude: say "set up Basecamp" in the Code tab and Claude installs the official Basecamp CLI (no admin rights needed), signs you in, and connects it. Afterward Basecamp works in Code, regular chat, and Cowork. Also covers updates and @mentions |
 
 ## How staff get skills
 
