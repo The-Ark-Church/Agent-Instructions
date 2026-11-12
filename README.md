@@ -22,12 +22,6 @@ Read these first, in this order:
 | [`skills/`](skills/) | Skills staff can install for their assistant |
 | [`recipes/`](recipes/) | Ready-to-deploy recipes for other systems — e.g. a [Workflow Health dashboard](recipes/workflow-health-dashboard/) for Rock RMS |
 
-## Connecting tools
-
-| Tool | How staff connect it |
-|---|---|
-| **Basecamp** | In the Claude desktop app, open the **Code** tab and say **"set up Basecamp."** The [`set-up-basecamp`](skills/set-up-basecamp/) skill installs 37signals' official Basecamp CLI (no admin rights needed), signs you in, and connects Basecamp to Claude. Afterward it works in Code, regular chat, and Cowork. |
-
 ## For humans
 
 - **Brand at a glance:** [`knowledge-base/ark-brand-review.html`](knowledge-base/ark-brand-review.html) (also published at thearkchurch.com/brand)
